@@ -5,7 +5,7 @@
 <br>
 
 ## About
-This project aims to examine perceptions of the ‘Orient’ in Danish newspapers from 1800 to 1880 utilizing text mining as well as sentiment analysis.
+The folder FinalProject contains the software for this project, which aims to examine perceptions of the ‘Orient’ in Danish newspapers from 1800 to 1880 utilizing text mining as well as sentiment analysis.
 
 <br>
 
@@ -16,7 +16,7 @@ Link to API: http://labs.statsbiblioteket.dk/labsapi/api//api-docs?url=/labsapi/
 <br>
 
 ## Software
-This code was developed with R 4.3.2, using RStudio Desktop (Version 2023.06.2+561). <br>
+This code was developed with R 4.3.2 using RStudio Desktop (Version 2023.06.2+561). <br>
 <br>
 The sentiment analysis was done with SENTIDA. <br>
 Link to SENTIDA GitHub Repository: https://github.com/Guscode/Sentida/tree/master 
