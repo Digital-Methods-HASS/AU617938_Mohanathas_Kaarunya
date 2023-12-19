@@ -5,7 +5,7 @@
 <br>
 
 ## About
-The folder FinalProject contains the software for this project, which aims to examine perceptions of the ‘Orient’ in Danish newspapers from 1800 to 1880 utilizing text mining as well as sentiment analysis.
+The folder FinalProject contains the software for this project, which aims be a proof of concept of utilizing text mining as well as sentiment analysis to examine perceptions of the ‘Orient’ in Danish newspapers from 1800 to 1880.
 
 <br>
 
