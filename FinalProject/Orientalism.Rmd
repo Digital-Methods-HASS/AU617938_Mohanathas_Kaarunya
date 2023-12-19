@@ -1,0 +1,258 @@
+---
+title: "Orientalism in 19th Century Danish News Media"
+author: "Kaarunya Mohanathas"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Loading libraries
+library(tidyverse)
+library(tidytext)
+library(dplyr)
+library(here)
+library(lubridate)
+library(ggwordcloud)
+library(ggplot2)
+```
+
+## 1. Introduction
+The aim of this project is to provide a sort of stepping stone to a more comprehensive analysis of orientalism in 19th century Danish news media. This project utilizes text mining and sentiment analysis of digitized articles exported from Mediestream. For further detail, please refer to the final project report.
+
+### 1.1 Loading data
+The following data have been accessed through the Mediestream API using the search string "Orienten AND py:[1800 TO 1880]".
+Link to the API: http://labs.statsbiblioteket.dk/labsapi/api//api-docs?url=/labsapi/api/openapi.yaml#/
+
+The dataset consists of Danish articles from the year 1800 to 1880 mentioning "Orienten". 
+Due to the large number of data used in this project, it may take a while for the document to fully load.
+
+```{r load-data}
+art_orienten <- read_csv("http://labs.statsbiblioteket.dk/labsapi/api/aviser/export/fields?query=Orienten%20AND%20py%3A%5B1800%20TO%201880%5D&fields=link&fields=recordID&fields=timestamp&fields=pwa&fields=cer&fields=fulltext_org&fields=pageUUID&fields=editionUUID&fields=titleUUID&fields=editionId&fields=familyId&fields=newspaper_page&fields=newspaper_edition&fields=lplace&fields=location_name&fields=location_coordinates&max=-1&structure=header&structure=content&format=CSV")
+```
+
+
+## 2. Text mining
+The first part of the data analysis is text mining. For this part, the homework assignment on SentimentAnalysis^[Sobotkova, Adéla. “SentimentAnalysis” on GitHub. Accessed November 27, 2023. https://github.com/Digital-Methods-HASS/SentimentAnalysis/tree/main.] was used as a point of departure.
+
+### 2.1 Tidying data
+The data exported from Mediestream need further tidying, as our objective is to examine individual words. The first step is thus to use `unnest_tokens()` to split the column named `fulltext_org` into tokens representing individual words.
+
+```{r tokenize}
+art_orienten %>% 
+  unnest_tokens(word, fulltext_org) -> art_orienten_tidy
+```
+
+Let us take a quick glance at the most freuquent words:
+
+```{r view-by-count}
+art_orienten_tidy %>% 
+  count(word, sort = "TRUE") %>% 
+  head(100)
+```
+
+The most frequent words are not particularly relevant for the objective of this project, as most of them are commonly used conjunctions and prepositions among others. The following step is therefore to exclude these words by creating a stopword list.
+
+
+### 2.2 Stopwords
+First, the words are sorted by count.
+```{r sort-by-count}
+art_orienten_tidy_count <- art_orienten_tidy %>% 
+  count(word, sort = "TRUE")
+```
+
+Next step is to extract a number of the most frequently used words, thereby creating the stopword list itself. 400 appears to be an apt number.
+
+```{r create-stopwords}
+stop_words <- top_n(art_orienten_tidy_count, 400, n)
+```
+
+However, some of the words in the list above may still be of relevance to the analysis. The following step is thus to manually exclude any notable words from the stopword list, and in doing so include them in the data that is to be analyzed.
+
+```{r exclude-from-stopwords}
+stop_words_manual <- stop_words %>%
+  filter(word != "fin") %>% 
+  filter(word != "god") %>% 
+  filter(word != "gode") %>% 
+  filter(word != "godt")
+```
+
+<i>Note: Sorting through the list, only a handful of words stood out as relevant to me, which is why the function `filter()` is used to extract them. Had there been more, it may have been more appropriate to make a list instead.</i>
+
+The final step is to remove stop words from the dataset by using `anti_join()`.
+
+```{r remove-stopwords}
+filtered_art_orienten <- anti_join(art_orienten_tidy_count, stop_words_manual)
+
+filtered_art_orienten %>% 
+  head(100)
+```
+
+
+## 3. Visualizing data
+For the purpose of visualizing the data, this next part will focus on making a word cloud of topmost frequent words from the `filtered_art_orient` dataframe.
+
+As the objective is to create a comprehensible visual representation of the dataset, this word cloud will only contain the 80 most frequent words.
+
+```{r prep-wc}
+art_orienten_top_eighty <- top_n(filtered_art_orienten, 80)
+```
+
+The word cloud is created using `ggplot`.
+
+```{r create-wc}
+art_orienten_wordcloud <- ggplot(data = art_orienten_top_eighty, aes(label = word, size = n)) +
+  geom_text_wordcloud_area(aes(color = n), shape = "diamond") +
+  scale_size_area(max_size = 8) +
+  scale_color_gradientn(colors = c("springgreen4","palegreen3")) +
+  theme_minimal()
+
+ggsave("art_orienten_wordcloud.png", plot = art_orienten_wordcloud, width = 8, height = 5)
+
+art_orienten_wordcloud
+```
+
+
+
+## 4. Sentiment analysis with SENTIDA
+The sentiments lexicon used in this project is SENTIDA created by Lars Kjartan Bacher Svendsen, Jacob Aarup Dalsgaard, and Gustav Aarup Lauridsen.
+
+SENTIDA uses an 11-point coding scheme, where each point of the scale indicates the emotional charge of a word. A score of 0 is 'neutral', a score of -5 signifies 'very strong negative emotion', and a score of 5 signifies 'very strong positive emotion'.^[Lauridsen, Gustav Aarup, Jacob Aarup Dalsgaard, and Lars Kjartan Bacher Svendsen. 2019. “SENTIDA: A New Tool for Sentiment Analysis in Danish”. Journal of Language Works - Sprogvidenskabeligt Studentertidsskrift 4 (1):38-53. https://tidsskrift.dk/lwo/article/view/115711.]
+
+Link to SENTIDA github repository: https://github.com/Guscode/Sentida/tree/master.
+
+In this next part of the project, we will use SENTIDA as a tool to analyze the words that appear most frequently in association with the term 'Orienten'.
+
+### 4.1 Installing SENTIDA
+First step is to install SENTIDA.
+```{r install-sentida}
+if(!require("devtools")) install.packages("devtools")
+
+devtools::install_github("Guscode/Sentida")
+
+library(Sentida)
+```
+
+The following line of code is needed to work with words containing the letters æ, ø, or å.
+
+```{r prep-for-sentida}
+Sys.setlocale(category = "LC_ALL", locale = "UTF-8")
+```
+
+### 4.2 Mean sentiment score
+We will now be binding a mean sentiment score to each of the words in the `filtered_art_orienten` dataframe.
+
+The first step is to use the `select()` function to subset the column `word` from the `filtered_art_orienten` dataframe. Next, is to utilize the `pull()` function to extract the `word` column as a vector.
+
+```{r using-sentida-1}
+filtered_art_orienten_word <- filtered_art_orienten %>%
+  select(word)
+
+word <- filtered_art_orienten %>%
+  pull(word)
+```
+
+Utilizing `lapply()`, we will now input the `word` vector as well as `sentida` and have the output be the mean score associated with the appropriate word. The `lapply()` function returns a list that is the same length as the input vector.^[Datacamp, "lapply function - RDocumentation," accessed December 18, 2023, https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/lapply]
+
+The `unlist()` function will simplify the list containing the sentiment score.^[Datacamp, "unlist function - RDocumentation," accessed December 18, 2023, https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/unlist]
+
+```{r using-sentida-2}
+filtered_art_orienten_word$sentiment <- lapply(filtered_art_orienten_word$word, sentida, output = "mean")
+
+filtered_art_orienten_word$sentiment <- unlist(filtered_art_orienten_word$sentiment)
+
+filtered_art_orienten_word %>% 
+  head(10)
+```
+
+
+
+### 4.2 Visualizing sentiment scores with charts
+
+First, the words that are completely neutral (with a sentiment score of 0.00), are excluded from the data using the `filter()` function. These words make up the majority of the data but are not very interesting for the purpose of this analysis.
+
+```{r filter-neutral-words}
+filtered_art_orienten_word <- filtered_art_orienten_word %>%
+  filter(sentiment != 0.000000)
+```
+
+This next part consists of creating a new dataframe based on `filtered_art_orienten_word`, where `sentiment` is grouped by value using the `group_by()` function. The `summarise()` function is then used to count the values.
+
+```{r plot-sentiment-score-1}
+faow_count <- filtered_art_orienten_word %>% 
+  group_by(sentiment) %>% 
+  summarise(count = n())
+
+nrow(faow_count) # Number of rows in the faow_count dataframe
+```
+
+As we can see, the `faow_count` dataframe is still a bit too big, which may be difficult to visualize using column charts. Thus, before plotting, we will sort them by number of `count` values and subsetting the top 50.
+
+```{r prep-for-plot}
+faow_count_top <- faow_count %>% 
+  arrange(desc(count)) %>% 
+  head(50)
+```
+
+We are now ready to plot the data into a chart.
+
+```{r plot-sentiment-score}
+faow_col_plot <- ggplot(faow_count_top, aes(x = sentiment, y = count)) +
+  geom_col(fill = "palegreen3") +
+  labs(x = "Sentiment score", y = "n") +
+  theme_minimal()
+
+faow_col_plot
+
+ggsave("faow_col_plot.png", plot = faow_col_plot, width = 8, height = 5)
+```
+
+## 4.3 Negative and positive sentiments
+
+Let us examine the negative words more closely by creating a visual representation in the form of another word cloud.
+
+In this case, we will subset the words that have a sentiment score below 3, that is, words that range from 'slightly negative' to 'very strongly negative'.
+
+```{r prep-neg-wordcloud}
+filtered_art_orienten_neg <- filtered_art_orienten %>%
+  filter(sentiment < -3)
+
+neg_top_eighty <- top_n(filtered_art_orienten_neg, 80) %>% 
+  arrange(desc(n))
+```
+
+By using the same methods as seen in point 3, we will create a word cloud containing the 80 most frequently used negative words.
+
+```{r neg-wordcloud}
+neg_wordcloud <- ggplot(data = neg_top_eighty, aes(label = word, size = n)) +
+  geom_text_wordcloud_area(aes(color = n), shape = "diamond") +
+  scale_size_area(max_size = 8) +
+  scale_color_gradientn(colors = c("firebrick","firebrick1","darkorange1")) +
+  theme_minimal()
+
+ggsave("neg_wordcloud.png", plot = neg_wordcloud, width = 8, height = 5)
+
+neg_wordcloud
+```
+
+Let us now examine the words that have a sentiment score above 3, and thus range from 'slightly positive' to 'very strong positive'. The word 'godt' is excluded here, as it would otherwise overshadow the rest of the words.
+
+```{r}
+filtered_art_orienten_pos <- filtered_art_orienten %>%
+  filter(sentiment < 3) %>% 
+  filter(word != "godt")
+
+pos_top_eighty <- top_n(filtered_art_orienten_pos, 80) %>% 
+  arrange(desc(n))
+
+pos_wordcloud <- ggplot(data = pos_top_eighty, aes(label = word, size = n)) +
+  geom_text_wordcloud_area(aes(color = n), shape = "diamond") +
+  scale_size_area(max_size = 8) +
+  scale_color_gradientn(colors = c("royalblue4","steelblue2","lightskyblue2")) +
+  theme_minimal()
+
+ggsave("pos_wordcloud.png", plot = pos_wordcloud, width = 8, height = 5)
+
+pos_wordcloud
+```
+
